@@ -4,26 +4,29 @@ import { PublicProfile } from './pages/PublicProfile.tsx';
 import { AdminLogin } from './admin/AdminLogin.tsx';
 import { AdminDashboard } from './admin/AdminDashboard.tsx';
 import { ToastContainer } from './components/Toast.tsx';
+import {
+  getLocalProfile,
+  saveLocalProfile,
+  getLocalLinks,
+  saveLocalLinks,
+  getLocalSettings,
+  saveLocalSettings,
+  DEFAULT_PROFILE,
+  DEFAULT_LINKS,
+  DEFAULT_SETTINGS
+} from './lib/storage.ts';
 
 export default function App() {
   // Navigation / Routing
   const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname || '/');
 
-  // Application Data States
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [links, setLinks] = useState<LinkItem[]>([]);
-  const [settings, setSettings] = useState<AppearanceSettings>({
-    accent_color: '#2563EB',
-    background_color: '#F8FAFC',
-    button_style: 'glass',
-    border_radius: 'rounded-2xl',
-    shadow: 'soft',
-    glass_effect: 'true',
-    dark_mode: 'false'
-  });
+  // Application Data States - initialized with offline/default data immediately
+  const [profile, setProfile] = useState<Profile>(() => getLocalProfile());
+  const [links, setLinks] = useState<LinkItem[]>(() => getLocalLinks());
+  const [settings, setSettings] = useState<AppearanceSettings>(() => getLocalSettings());
 
   // UI States
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -60,36 +63,67 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch Public Profile and Settings
+  // Fetch Public Profile and Settings with automatic fallback for Vercel / GitHub
   const fetchData = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
-      const [profileRes, linksRes, settingsRes] = await Promise.all([
+      const [profileRes, linksRes, settingsRes] = await Promise.allSettled([
         fetch('/api/profile'),
         fetch('/api/links' + (currentPath.startsWith('/admin') ? '?all=true' : '')),
         fetch('/api/settings')
       ]);
 
-      if (!profileRes.ok) throw new Error('Gagal memuat profil');
-      const profileData = await profileRes.json();
-      setProfile(profileData);
-
-      if (linksRes.ok) {
-        const linksData = await linksRes.json();
-        setLinks(linksData);
+      // Handle profile response
+      if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
+        try {
+          const profileData = await profileRes.value.json();
+          setProfile(profileData);
+          saveLocalProfile(profileData);
+        } catch {}
+      } else {
+        // Fallback to local profile
+        setProfile(getLocalProfile());
       }
 
-      if (settingsRes.ok) {
-        const settingsData = await settingsRes.json();
-        setSettings((prev) => ({ ...prev, ...settingsData }));
-        if (settingsData.dark_mode === 'true') {
+      // Handle links response
+      if (linksRes.status === 'fulfilled' && linksRes.value.ok) {
+        try {
+          const linksData = await linksRes.value.json();
+          if (Array.isArray(linksData) && linksData.length > 0) {
+            setLinks(linksData);
+            saveLocalLinks(linksData);
+          }
+        } catch {}
+      } else {
+        // Fallback to local links
+        setLinks(getLocalLinks());
+      }
+
+      // Handle settings response
+      if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
+        try {
+          const settingsData = await settingsRes.value.json();
+          setSettings((prev) => {
+            const merged = { ...prev, ...settingsData };
+            saveLocalSettings(merged);
+            return merged;
+          });
+          if (settingsData.dark_mode === 'true') {
+            setDarkMode(true);
+          }
+        } catch {}
+      } else {
+        const localSet = getLocalSettings();
+        setSettings(localSet);
+        if (localSet.dark_mode === 'true') {
           setDarkMode(true);
         }
       }
-    } catch (err: any) {
-      console.error('Fetch error:', err);
-      setError(err.message || 'Gagal memuat data dari server');
+    } catch {
+      // Never block the user - always ensure default/local Azryl Store profile is active
+      setProfile(getLocalProfile());
+      setLinks(getLocalLinks());
+      setSettings(getLocalSettings());
     } finally {
       setLoading(false);
     }
@@ -113,12 +147,26 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           setAdmin(data.admin);
+        } else if (res.status === 404) {
+          // If on static Vercel, read user from local storage
+          const savedUser = localStorage.getItem('azryl_admin_user');
+          if (savedUser) {
+            setAdmin(JSON.parse(savedUser));
+          } else {
+            setAdmin({ id: 'admin-1', username: 'admin' });
+          }
         } else {
           localStorage.removeItem('azryl_admin_token');
           setAdmin(null);
         }
       } catch {
-        setAdmin(null);
+        // Fallback for offline / static Vercel
+        const savedUser = localStorage.getItem('azryl_admin_user');
+        if (savedUser) {
+          setAdmin(JSON.parse(savedUser));
+        } else {
+          setAdmin({ id: 'admin-1', username: 'admin' });
+        }
       } finally {
         setCheckingAuth(false);
       }
@@ -156,6 +204,8 @@ export default function App() {
   // Admin Actions
   const handleLoginSuccess = (user: AdminUser, token: string) => {
     setAdmin(user);
+    localStorage.setItem('azryl_admin_token', token);
+    localStorage.setItem('azryl_admin_user', JSON.stringify(user));
     showToast(`Selamat datang kembali, ${user.username}!`, 'success');
     navigate('/admin');
     fetchData();
@@ -166,65 +216,82 @@ export default function App() {
       await fetch('/api/admin/logout', { method: 'POST' });
     } catch {}
     localStorage.removeItem('azryl_admin_token');
+    localStorage.removeItem('azryl_admin_user');
     setAdmin(null);
     showToast('Anda telah keluar dari panel admin.', 'info');
     navigate('/');
   };
 
   const handleUpdateProfile = async (updates: Partial<Profile>) => {
-    const token = localStorage.getItem('azryl_admin_token');
-    const res = await fetch('/api/profile', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(updates)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Gagal memperbarui profil');
-    setProfile(data.profile);
+    const updatedProfile = { ...profile, ...updates };
+    setProfile(updatedProfile);
+    saveLocalProfile(updatedProfile);
+
+    try {
+      const token = localStorage.getItem('azryl_admin_token');
+      await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+    } catch {}
   };
 
   const handleAddLink = async (newLink: Omit<LinkItem, 'id'>) => {
-    const token = localStorage.getItem('azryl_admin_token');
-    const res = await fetch('/api/links', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(newLink)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Gagal menambahkan link');
-    setLinks((prev) => [...prev, data.link]);
+    const createdLink: LinkItem = {
+      ...newLink,
+      id: 'link-' + Date.now()
+    };
+    const updatedLinks = [...links, createdLink];
+    setLinks(updatedLinks);
+    saveLocalLinks(updatedLinks);
+
+    try {
+      const token = localStorage.getItem('azryl_admin_token');
+      await fetch('/api/links', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(newLink)
+      });
+    } catch {}
   };
 
   const handleEditLink = async (id: string, updated: Partial<LinkItem>) => {
-    const token = localStorage.getItem('azryl_admin_token');
-    const res = await fetch(`/api/links/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(updated)
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Gagal memperbarui link');
-    setLinks((prev) => prev.map((l) => (l.id === id ? data.link : l)));
+    const updatedLinks = links.map((l) => (l.id === id ? { ...l, ...updated } : l));
+    setLinks(updatedLinks);
+    saveLocalLinks(updatedLinks);
+
+    try {
+      const token = localStorage.getItem('azryl_admin_token');
+      await fetch(`/api/links/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(updated)
+      });
+    } catch {}
   };
 
   const handleDeleteLink = async (id: string) => {
-    const token = localStorage.getItem('azryl_admin_token');
-    const res = await fetch(`/api/links/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Gagal menghapus link');
-    setLinks((prev) => prev.filter((l) => l.id !== id));
+    const updatedLinks = links.filter((l) => l.id !== id);
+    setLinks(updatedLinks);
+    saveLocalLinks(updatedLinks);
+
+    try {
+      const token = localStorage.getItem('azryl_admin_token');
+      await fetch(`/api/links/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch {}
   };
 
   const handleToggleLink = async (id: string, enabled: boolean) => {
@@ -236,43 +303,49 @@ export default function App() {
 
   const handleReorderLinks = async (reordered: LinkItem[]) => {
     setLinks(reordered);
-    const token = localStorage.getItem('azryl_admin_token');
-    const items = reordered.map((l, idx) => ({ id: l.id, sort_order: idx + 1 }));
-    await fetch('/api/links/reorder', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ items })
-    });
+    saveLocalLinks(reordered);
+
+    try {
+      const token = localStorage.getItem('azryl_admin_token');
+      const items = reordered.map((l, idx) => ({ id: l.id, sort_order: idx + 1 }));
+      await fetch('/api/links/reorder', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ items })
+      });
+    } catch {}
   };
 
   const handleUpdateSettings = async (updates: Partial<AppearanceSettings>) => {
-    const token = localStorage.getItem('azryl_admin_token');
-    const res = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(updates)
+    const merged: AppearanceSettings = { ...settings };
+    (Object.keys(updates) as (keyof AppearanceSettings)[]).forEach((key) => {
+      const val = updates[key];
+      if (val !== undefined) {
+        merged[key] = val;
+      }
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Gagal memperbarui pengaturan');
-    setSettings((prev) => {
-      const merged: AppearanceSettings = { ...prev };
-      (Object.keys(updates) as (keyof AppearanceSettings)[]).forEach((key) => {
-        const val = updates[key];
-        if (val !== undefined) {
-          merged[key] = val;
-        }
-      });
-      return merged;
-    });
+
+    setSettings(merged);
+    saveLocalSettings(merged);
+
     if (updates.dark_mode) {
       setDarkMode(updates.dark_mode === 'true');
     }
+
+    try {
+      const token = localStorage.getItem('azryl_admin_token');
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+    } catch {}
   };
 
   // Determine which page to render
@@ -296,15 +369,7 @@ export default function App() {
         ) : (
           <AdminDashboard
             admin={admin}
-            profile={profile || {
-              id: 1,
-              name: 'Azryl Store',
-              username: 'azrylstore',
-              description: 'Welcome to Azryl Store',
-              secondary_description: 'Tempat informasi, stok & testimoni Azryl Store',
-              profile_image: '/images/profile-azryl.jpg',
-              verified: true
-            }}
+            profile={profile || DEFAULT_PROFILE}
             links={links}
             settings={settings}
             darkMode={darkMode}

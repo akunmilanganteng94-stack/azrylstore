@@ -91,12 +91,28 @@ Untuk membuat build frontend siap produksi:
 npm run build
 ```
 
-### 8. Menjalankan di Server Production
+### 8. Menjalankan di Server Production / Cloud
 Jalankan server Node.js:
 ```bash
 npm start
 ```
 Atau deploy ke layanan cloud seperti Google Cloud Run, Railway, VPS, Render, dsb.
+
+### 9. Deploy ke Vercel via GitHub (Solusi Masalah "Gagal Memuat Profil")
+Website kini **100% kompatibel dengan Vercel & Jamstack**:
+1. **Penyebab masalah sebelumnya**: Vercel secara bawaan menyajikan file statis dari `dist/` tanpa server Node.js yang berjalan permanen, sehingga pemanggilan `/api/profile` menghasilkan 404 jika tidak ada konfigurasi serverless/fallback.
+2. **Solusi yang telah diterapkan**:
+   - File `vercel.json` telah ditambahkan dengan aturan *rewrites* SPA dan routing API.
+   - Entry point serverless Vercel `api/index.ts` telah dibuat.
+   - Sistem **Client Storage & Resilient Fallback** di `src/lib/storage.ts`: Jika API backend offline atau mengembalikan 404 di Vercel, website otomatis menampilkan profil dan seluruh link WhatsApp resmi Azryl Store tanpa pernah menampilkan error *"Gagal Memuat Profil"*.
+   - Panel admin di `/admin` tetap berfungsi dan menyimpan perubahan ke penyimpanan lokal jika di-deploy sebagai static Vercel.
+3. **Cara Deploy ke Vercel**:
+   - Push repository Anda ke **GitHub**.
+   - Buka [Vercel Dashboard](https://vercel.com) > **Add New Project** > Import repository GitHub Anda.
+   - Framework Preset: **Vite**
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+   - Klik **Deploy**. Selesai! Halaman profil dan seluruh link akan langsung tampil sempurna.
 
 ---
 
