@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, ShieldCheck, KeyRound, Loader2, Save } from 'lucide-react';
 import { AdminUser } from '../types/index.ts';
+import { updateAdminPasswordInFirebase } from '../lib/firebase.ts';
 
 interface AdminSettingsProps {
   admin: AdminUser;
@@ -53,7 +54,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ admin, onShowToast
         }
       }
 
-      // If on static Vercel, save custom pass locally
+      // Update password in Firebase Firestore
+      await updateAdminPasswordInFirebase(newPassword);
       localStorage.setItem('azryl_admin_custom_pass', newPassword);
 
       onShowToast('Password admin berhasil diubah!', 'success');

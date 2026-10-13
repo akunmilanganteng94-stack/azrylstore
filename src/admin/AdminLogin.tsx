@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, User, ArrowLeft, Loader2, ShieldAlert } from 'lucide-react';
 import { AdminUser } from '../types/index.ts';
+import { verifyAdminInFirebase } from '../lib/firebase.ts';
 
 interface AdminLoginProps {
   onLoginSuccess: (admin: AdminUser, token: string) => void;
@@ -45,12 +46,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLoginSuccess, onGoBack
         }
       }
 
-      // Static Vercel / Offline Fallback Authentication
-      const savedPass = localStorage.getItem('azryl_admin_custom_pass') || 'AzrylStore2026!';
+      // Check Firebase authentication
+      const isFirebaseValid = await verifyAdminInFirebase(password);
       const cleanUser = username.trim();
-      if ((cleanUser === 'admin' || cleanUser === 'azryl') && (password === savedPass || password === 'AzrylStore2026!')) {
+      if ((cleanUser === 'admin' || cleanUser === 'azryl') && isFirebaseValid) {
         const adminUser = { id: 'admin-1', username: cleanUser };
-        const dummyToken = 'local-admin-token-' + Date.now();
+        const dummyToken = 'firebase-admin-token-' + Date.now();
         localStorage.setItem('azryl_admin_token', dummyToken);
         localStorage.setItem('azryl_admin_user', JSON.stringify(adminUser));
         onLoginSuccess(adminUser, dummyToken);

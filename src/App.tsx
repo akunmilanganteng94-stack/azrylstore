@@ -15,6 +15,16 @@ import {
   DEFAULT_LINKS,
   DEFAULT_SETTINGS
 } from './lib/storage.ts';
+import {
+  getProfileFromFirebase,
+  saveProfileToFirebase,
+  getLinksFromFirebase,
+  saveLinkToFirebase,
+  deleteLinkFromFirebase,
+  reorderLinksInFirebase,
+  getSettingsFromFirebase,
+  saveSettingsToFirebase
+} from './lib/firebase.ts';
 
 export default function App() {
   // Navigation / Routing
@@ -63,71 +73,44 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Fetch Public Profile and Settings with automatic fallback for Vercel / GitHub
+  // Fetch Public Profile and Settings directly from Firebase Firestore with Local fallback
   const fetchData = useCallback(async () => {
     setError(null);
     try {
-      const [profileRes, linksRes, settingsRes] = await Promise.allSettled([
-        fetch('/api/profile'),
-        fetch('/api/links' + (currentPath.startsWith('/admin') ? '?all=true' : '')),
-        fetch('/api/settings')
+      // 1. Fetch from Firebase Firestore
+      const [fbProfile, fbLinks, fbSettings] = await Promise.all([
+        getProfileFromFirebase(),
+        getLinksFromFirebase(),
+        getSettingsFromFirebase()
       ]);
 
-      // Handle profile response
-      if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
-        try {
-          const profileData = await profileRes.value.json();
-          setProfile(profileData);
-          saveLocalProfile(profileData);
-        } catch {}
-      } else {
-        // Fallback to local profile
-        setProfile(getLocalProfile());
+      if (fbProfile) {
+        setProfile(fbProfile);
+        saveLocalProfile(fbProfile);
       }
 
-      // Handle links response
-      if (linksRes.status === 'fulfilled' && linksRes.value.ok) {
-        try {
-          const linksData = await linksRes.value.json();
-          if (Array.isArray(linksData) && linksData.length > 0) {
-            setLinks(linksData);
-            saveLocalLinks(linksData);
-          }
-        } catch {}
-      } else {
-        // Fallback to local links
-        setLinks(getLocalLinks());
+      if (Array.isArray(fbLinks) && fbLinks.length > 0) {
+        setLinks(fbLinks);
+        saveLocalLinks(fbLinks);
       }
 
-      // Handle settings response
-      if (settingsRes.status === 'fulfilled' && settingsRes.value.ok) {
-        try {
-          const settingsData = await settingsRes.value.json();
-          setSettings((prev) => {
-            const merged = { ...prev, ...settingsData };
-            saveLocalSettings(merged);
-            return merged;
-          });
-          if (settingsData.dark_mode === 'true') {
-            setDarkMode(true);
-          }
-        } catch {}
-      } else {
-        const localSet = getLocalSettings();
-        setSettings(localSet);
-        if (localSet.dark_mode === 'true') {
+      if (fbSettings) {
+        setSettings(fbSettings);
+        saveLocalSettings(fbSettings);
+        if (fbSettings.dark_mode === 'true') {
           setDarkMode(true);
         }
       }
-    } catch {
-      // Never block the user - always ensure default/local Azryl Store profile is active
+    } catch (err) {
+      console.warn('Firebase sync note, using local fallback:', err);
+      // Fallback to local data
       setProfile(getLocalProfile());
       setLinks(getLocalLinks());
       setSettings(getLocalSettings());
     } finally {
       setLoading(false);
     }
-  }, [currentPath]);
+  }, []);
 
   // Check Admin Session on mount
   useEffect(() => {
@@ -140,36 +123,17 @@ export default function App() {
         return;
       }
 
-      try {
-        const res = await fetch('/api/admin/me', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setAdmin(data.admin);
-        } else if (res.status === 404) {
-          // If on static Vercel, read user from local storage
-          const savedUser = localStorage.getItem('azryl_admin_user');
-          if (savedUser) {
-            setAdmin(JSON.parse(savedUser));
-          } else {
-            setAdmin({ id: 'admin-1', username: 'admin' });
-          }
-        } else {
-          localStorage.removeItem('azryl_admin_token');
-          setAdmin(null);
-        }
-      } catch {
-        // Fallback for offline / static Vercel
-        const savedUser = localStorage.getItem('azryl_admin_user');
-        if (savedUser) {
+      const savedUser = localStorage.getItem('azryl_admin_user');
+      if (savedUser) {
+        try {
           setAdmin(JSON.parse(savedUser));
-        } else {
+        } catch {
           setAdmin({ id: 'admin-1', username: 'admin' });
         }
-      } finally {
-        setCheckingAuth(false);
+      } else {
+        setAdmin({ id: 'admin-1', username: 'admin' });
       }
+      setCheckingAuth(false);
     };
 
     checkAdmin();
@@ -201,7 +165,7 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Admin Actions
+  // Admin Actions with Firebase sync
   const handleLoginSuccess = (user: AdminUser, token: string) => {
     setAdmin(user);
     localStorage.setItem('azryl_admin_token', token);
@@ -212,9 +176,6 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch('/api/admin/logout', { method: 'POST' });
-    } catch {}
     localStorage.removeItem('azryl_admin_token');
     localStorage.removeItem('azryl_admin_user');
     setAdmin(null);
@@ -228,16 +189,10 @@ export default function App() {
     saveLocalProfile(updatedProfile);
 
     try {
-      const token = localStorage.getItem('azryl_admin_token');
-      await fetch('/api/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(updates)
-      });
-    } catch {}
+      await saveProfileToFirebase(updatedProfile);
+    } catch (err) {
+      console.warn('Firebase save warning:', err);
+    }
   };
 
   const handleAddLink = async (newLink: Omit<LinkItem, 'id'>) => {
@@ -250,34 +205,25 @@ export default function App() {
     saveLocalLinks(updatedLinks);
 
     try {
-      const token = localStorage.getItem('azryl_admin_token');
-      await fetch('/api/links', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(newLink)
-      });
-    } catch {}
+      await saveLinkToFirebase(createdLink);
+    } catch (err) {
+      console.warn('Firebase link save warning:', err);
+    }
   };
 
   const handleEditLink = async (id: string, updated: Partial<LinkItem>) => {
     const updatedLinks = links.map((l) => (l.id === id ? { ...l, ...updated } : l));
+    const targetLink = updatedLinks.find((l) => l.id === id);
     setLinks(updatedLinks);
     saveLocalLinks(updatedLinks);
 
-    try {
-      const token = localStorage.getItem('azryl_admin_token');
-      await fetch(`/api/links/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(updated)
-      });
-    } catch {}
+    if (targetLink) {
+      try {
+        await saveLinkToFirebase(targetLink);
+      } catch (err) {
+        console.warn('Firebase link edit warning:', err);
+      }
+    }
   };
 
   const handleDeleteLink = async (id: string) => {
@@ -286,12 +232,10 @@ export default function App() {
     saveLocalLinks(updatedLinks);
 
     try {
-      const token = localStorage.getItem('azryl_admin_token');
-      await fetch(`/api/links/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-    } catch {}
+      await deleteLinkFromFirebase(id);
+    } catch (err) {
+      console.warn('Firebase link delete warning:', err);
+    }
   };
 
   const handleToggleLink = async (id: string, enabled: boolean) => {
@@ -306,17 +250,10 @@ export default function App() {
     saveLocalLinks(reordered);
 
     try {
-      const token = localStorage.getItem('azryl_admin_token');
-      const items = reordered.map((l, idx) => ({ id: l.id, sort_order: idx + 1 }));
-      await fetch('/api/links/reorder', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ items })
-      });
-    } catch {}
+      await reorderLinksInFirebase(reordered);
+    } catch (err) {
+      console.warn('Firebase reorder warning:', err);
+    }
   };
 
   const handleUpdateSettings = async (updates: Partial<AppearanceSettings>) => {
@@ -336,16 +273,10 @@ export default function App() {
     }
 
     try {
-      const token = localStorage.getItem('azryl_admin_token');
-      await fetch('/api/settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(updates)
-      });
-    } catch {}
+      await saveSettingsToFirebase(merged);
+    } catch (err) {
+      console.warn('Firebase settings save warning:', err);
+    }
   };
 
   // Determine which page to render

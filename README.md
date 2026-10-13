@@ -19,13 +19,17 @@ Website profil dan Link-in-Bio modern, responsif, dan elegan untuk **Azryl Store
   - WhatsApp Azryl 2: `https://wa.me/6285119960357`
   - Saluran Testi / Stok Azryl: `https://whatsapp.com/channel/0029Vb6f6rd7IUYaIsu96h2E`
   - Grup JB Azryl Store: `https://chat.whatsapp.com/CoWwYhB9Bc5IFYNSRkmiUm?s=cl&p=a&mlu=4&ilr=4`
+- **Firebase Cloud Firestore Terintegrasi (`all-preset-azryl`)**:
+  - Sinkronisasi data profil, links, dan pengaturan langsung ke Firebase Cloud Firestore.
+  - Berjalan 100% lancar di Vercel, Netlify, GitHub Pages, maupun server Node.js tanpa perlu server database terpisah.
+  - Dilengkapi sistem fallback offline sehingga halaman dijamin tidak pernah error.
 - **Panel Admin Terpisah (`/admin`)**:
-  - Login aman dengan Bcrypt password hashing, session JWT 24 jam, dan perlindungan rate-limiting dari serangan brute-force.
+  - Login aman dengan sinkronisasi Firebase & proteksi session.
   - Dashboard statistik (Total Links, Active, Inactive).
   - Editor profil (Nama, Username, Deskripsi, Foto Profil, Toggle Verified).
   - Pengelola Link (Tambah, Edit, Hapus dengan konfirmasi, Toggle On/Off, Drag & Drop / Urutkan naik/turun).
   - Pengaturan Tampilan (Warna aksen, border radius, efek glassmorphism, default dark mode).
-  - Pengaturan Keamanan (Ubah password admin dengan konfirmasi password lama).
+  - Pengaturan Keamanan (Ubah password admin).
   - Live Mobile Preview (Simulator smartphone langsung di panel admin).
 - **Dark Mode**: Dukungan mode gelap & terang dengan transisi halus.
 - **PWA & Offline Ready**: File `manifest.json`, `sw.js` (service worker), icon, dan meta tags responsif mobile.

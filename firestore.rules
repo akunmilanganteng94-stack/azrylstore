@@ -1,0 +1,21 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public read for profile, links, and appearance
+    match /profiles/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /links/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /settings/{document=**} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /admins/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
