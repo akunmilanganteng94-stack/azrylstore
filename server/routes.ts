@@ -52,10 +52,10 @@ apiRouter.get('/links', async (req: Request, res: Response) => {
   try {
     const db = await getDb();
     const showAll = req.query.all === 'true';
-    let query = 'SELECT id, title, description, url, icon, enabled, sort_order FROM links WHERE enabled = 1 ORDER BY sort_order ASC';
+    let query = 'SELECT id, title, description, url, icon, enabled, sort_order, image_url FROM links WHERE enabled = 1 ORDER BY sort_order ASC';
     
     if (showAll) {
-      query = 'SELECT id, title, description, url, icon, enabled, sort_order FROM links ORDER BY sort_order ASC';
+      query = 'SELECT id, title, description, url, icon, enabled, sort_order, image_url FROM links ORDER BY sort_order ASC';
     }
 
     const result = db.exec(query);
@@ -344,7 +344,7 @@ apiRouter.post('/profile/image', requireAuth, async (req: Request, res: Response
 // POST /api/links (Add Link)
 apiRouter.post('/links', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { title, description, url, icon, enabled, sort_order } = req.body;
+    const { title, description, url, icon, enabled, sort_order, image_url } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: 'Judul link wajib diisi.' });
@@ -372,8 +372,8 @@ apiRouter.post('/links', requireAuth, async (req: Request, res: Response) => {
     }
 
     db.run(
-      `INSERT INTO links (id, title, description, url, icon, enabled, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO links (id, title, description, url, icon, enabled, sort_order, image_url, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         linkId,
         title.trim(),
@@ -382,6 +382,7 @@ apiRouter.post('/links', requireAuth, async (req: Request, res: Response) => {
         icon || 'link',
         enabled === false ? 0 : 1,
         order,
+        image_url ? String(image_url).trim() : null,
         now,
         now
       ]
@@ -397,7 +398,8 @@ apiRouter.post('/links', requireAuth, async (req: Request, res: Response) => {
         url: trimmedUrl,
         icon: icon || 'link',
         enabled: enabled !== false,
-        sort_order: order
+        sort_order: order,
+        image_url: image_url ? String(image_url).trim() : undefined
       }
     });
   } catch (err: any) {
@@ -409,7 +411,7 @@ apiRouter.post('/links', requireAuth, async (req: Request, res: Response) => {
 apiRouter.put('/links/:id', requireAuth, async (req: Request, res: Response) => {
   try {
     const linkId = req.params.id;
-    const { title, description, url, icon, enabled, sort_order } = req.body;
+    const { title, description, url, icon, enabled, sort_order, image_url } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ error: 'Judul link wajib diisi.' });
@@ -430,7 +432,7 @@ apiRouter.put('/links/:id', requireAuth, async (req: Request, res: Response) => 
 
     db.run(
       `UPDATE links
-       SET title = ?, description = ?, url = ?, icon = ?, enabled = ?, sort_order = ?, updated_at = ?
+       SET title = ?, description = ?, url = ?, icon = ?, enabled = ?, sort_order = ?, image_url = ?, updated_at = ?
        WHERE id = ?`,
       [
         title.trim(),
@@ -439,6 +441,7 @@ apiRouter.put('/links/:id', requireAuth, async (req: Request, res: Response) => 
         icon || 'link',
         enabledInt,
         sort_order !== undefined ? Number(sort_order) : 1,
+        image_url ? String(image_url).trim() : null,
         now,
         linkId
       ]
@@ -454,7 +457,8 @@ apiRouter.put('/links/:id', requireAuth, async (req: Request, res: Response) => 
         url: url.trim(),
         icon: icon || 'link',
         enabled: Boolean(enabledInt),
-        sort_order: Number(sort_order)
+        sort_order: Number(sort_order),
+        image_url: image_url ? String(image_url).trim() : undefined
       }
     });
   } catch (err: any) {

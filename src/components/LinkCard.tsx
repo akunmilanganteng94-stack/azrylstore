@@ -38,8 +38,8 @@ export const LinkCard: React.FC<LinkCardProps> = ({
       {/* Left: Icon in rounded badge */}
       <div className="flex items-center gap-3.5 sm:gap-4 min-w-0 pr-2">
         <div
-          className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 transition-transform duration-200 group-hover:scale-105 ${
-            isWhatsApp
+          className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 overflow-hidden transition-transform duration-200 group-hover:scale-105 ${
+            isWhatsApp && !link.image_url
               ? 'bg-[#25D366]/15 text-[#128C7E] dark:bg-[#25D366]/20 dark:text-[#25D366]'
               : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
           }`}
@@ -47,7 +47,17 @@ export const LinkCard: React.FC<LinkCardProps> = ({
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
           }}
         >
-          {isWhatsApp ? (
+          {link.image_url ? (
+            <img
+              src={link.image_url}
+              alt={link.title}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // If custom image fails to load, hide image so container shows icon
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : isWhatsApp ? (
             <WhatsAppIcon className="w-6 h-6" />
           ) : (
             renderLinkIcon(link.icon, 'w-6 h-6')

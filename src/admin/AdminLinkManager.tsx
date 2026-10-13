@@ -43,6 +43,7 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
   const [description, setDescription] = useState('');
   const [url, setUrl] = useState('');
   const [icon, setIcon] = useState('whatsapp');
+  const [imageUrl, setImageUrl] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -59,6 +60,7 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
     setDescription('');
     setUrl('');
     setIcon('whatsapp');
+    setImageUrl('');
     setEnabled(true);
     setIsModalOpen(true);
   };
@@ -69,6 +71,7 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
     setDescription(link.description || '');
     setUrl(link.url);
     setIcon(link.icon || 'whatsapp');
+    setImageUrl(link.image_url || '');
     setEnabled(link.enabled);
     setIsModalOpen(true);
   };
@@ -88,7 +91,8 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
           description: description.trim(),
           url: url.trim(),
           icon,
-          enabled
+          enabled,
+          image_url: imageUrl.trim() || undefined
         });
         onShowToast('Link berhasil diperbarui.', 'success');
       } else {
@@ -98,7 +102,8 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
           url: url.trim(),
           icon,
           enabled,
-          sort_order: links.length + 1
+          sort_order: links.length + 1,
+          image_url: imageUrl.trim() || undefined
         });
         onShowToast('Link berhasil ditambahkan.', 'success');
       }
@@ -229,8 +234,19 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
                   <GripVertical className="w-4 h-4" />
                 </div>
 
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  {renderLinkIcon(link.icon, 'w-5 h-5')}
+                <div className="w-10 h-10 rounded-xl overflow-hidden bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-800">
+                  {link.image_url ? (
+                    <img
+                      src={link.image_url}
+                      alt={link.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    renderLinkIcon(link.icon, 'w-5 h-5')
+                  )}
                 </div>
 
                 <div className="flex flex-col min-w-0">
@@ -371,8 +387,47 @@ export const AdminLinkManager: React.FC<LinkManagerProps> = ({
               </div>
 
               <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Foto / PP Link (Opsional - Bisa gunakan link PP WA)
+                  </label>
+                  {imageUrl && (
+                    <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                      ✓ PP Aktif
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt="Preview PP"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/images/profile-azryl.jpg';
+                        }}
+                      />
+                    ) : (
+                      renderLinkIcon(icon, 'w-5 h-5 text-slate-400')
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://... (Link Foto Profil / PP WA)"
+                    className="flex-1 px-3.5 py-2.5 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Masukkan link gambar/foto untuk menggunakan Foto Profil (PP WA) pada link ini.
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                  Pilih Icon
+                  Pilih Icon (Digunakan jika PP kosong)
                 </label>
                 <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 max-h-40 overflow-y-auto p-1">
                   {AVAILABLE_ICONS.map((item) => (

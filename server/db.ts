@@ -108,6 +108,7 @@ export async function getDb(): Promise<SqlDatabase> {
       icon TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL,
+      image_url TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -119,6 +120,10 @@ export async function getDb(): Promise<SqlDatabase> {
       updated_at TEXT NOT NULL
     );
   `);
+
+  try {
+    dbInstance.run("ALTER TABLE links ADD COLUMN image_url TEXT");
+  } catch {}
 
   // Seed default admin if none exists
   const adminCheck = dbInstance.exec("SELECT COUNT(*) as count FROM admins");

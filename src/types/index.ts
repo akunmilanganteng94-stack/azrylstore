@@ -16,6 +16,7 @@ export interface LinkItem {
   icon: string;
   enabled: boolean;
   sort_order: number;
+  image_url?: string;
 }
 
 export interface AppearanceSettings {
