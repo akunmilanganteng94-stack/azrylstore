@@ -1,0 +1,17 @@
+{
+  "short_name": "Azryl Store",
+  "name": "Azryl Store - Link-in-Bio & Profil",
+  "icons": [
+    {
+      "src": "/images/profile-azryl.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F8FAFC",
+  "theme_color": "#2563EB",
+  "display": "standalone",
+  "orientation": "portrait"
+}

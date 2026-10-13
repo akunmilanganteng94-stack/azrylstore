@@ -1,0 +1,6 @@
+{
+  "name": "Azryl Store",
+  "description": "Website profil dan link-in-bio profesional Azryl Store untuk informasi stok, testimoni, dan grup jual beli.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
